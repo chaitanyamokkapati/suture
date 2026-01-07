@@ -1,0 +1,26 @@
+{
+    "IDAMetadataDescriptorVersion": 1,
+    "plugin": {
+        "name": "Suture",
+        "entryPoint": "main.py",
+        "version": "1.0.0",
+        "description": "Automated structure recovery using AST pattern matching",
+        "logoPath": "icon.png",
+        "license": "MIT",
+        "categories": [
+            "ui-ux-and-visualization"
+        ],
+        "urls": {
+            "repository": "https://github.com/libtero/suture"
+        },
+        "authors": [{
+            "name": "tero",
+            "email": "arttson@gmail.com"
+        }],
+        "keywords": [
+            "struct",
+            "structure",
+            "reconstruction"
+        ]
+    }
+}
