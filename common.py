@@ -203,6 +203,74 @@ class Slice:
 
 		return score
 
+	def similarity(self, other) -> float:
+		if not isinstance(other, Slice):
+			return 0.0
+
+		total_score = 0.0
+		max_score = 0.0
+
+		base_score, base_max = self._compare_base(other)
+		total_score += base_score
+		max_score += base_max
+
+		for attr in ['x', 'y', 'z']:
+			score, max_s = self._compare_attr(getattr(self, attr), getattr(other, attr))
+			total_score += score
+			max_score += max_s
+
+		a_score, a_max = self._compare_args(self.a, other.a)
+		total_score += a_score
+		max_score += a_max
+
+		if self.predicate and other.predicate:
+			total_score += 2.0
+			max_score += 2.0
+		elif self.predicate or other.predicate:
+			max_score += 2.0
+
+		return total_score / max_score if max_score > 0 else 0.0
+
+	def _compare_base(self, other) -> tuple[float, float]:
+		if isinstance(self.base, Slice) and isinstance(other.base, Slice):
+			return self.base.similarity(other.base), 1.0
+		elif isinstance(self.base, tuple) and isinstance(other.base, tuple):
+			matches = sum(1 for a in self.base if a in other.base)
+			return matches, max(len(self.base), len(other.base))
+		elif self.base == other.base:
+			return 1.0, 1.0
+		return 0.0, 1.0
+
+	def _compare_attr(self, a, b) -> tuple[float, float]:
+		if a is None and b is None:
+			return 0.0, 0.0
+		if a is None or b is None:
+			return 0.0, 1.0
+
+		if isinstance(a, Slice) and isinstance(b, Slice):
+			return a.similarity(b), 1.0
+		elif isinstance(a, tuple) and isinstance(b, tuple):
+			matches = sum(1 for x in a if x in b or any(
+				isinstance(x, Slice) and isinstance(y, Slice) and x.similarity(y) > 0.8 for y in b))
+			return matches, max(len(a), len(b))
+		elif a == b:
+			return 1.0, 1.0
+		return 0.0, 1.0
+
+	def _compare_args(self, a, b) -> tuple[float, float]:
+		if a is None and b is None:
+			return 0.0, 0.0
+		if a is None or b is None:
+			return 0.0, 1.0
+
+		if isinstance(a, dict) and isinstance(b, dict):
+			shared_keys = set(a.keys()) & set(b.keys())
+			score = sum(1 for k in shared_keys if self._compare_attr(a[k], b[k])[0] > 0)
+			return score, max(len(a), len(b))
+		elif isinstance(a, Slice) and isinstance(b, Slice):
+			return a.similarity(b), 1.0
+		return 0.0, 1.0
+
 
 class AccessInfo:
 	def __init__(self, off: int, tif: ida_typeinf.tinfo_t | AccessInfo):
@@ -261,6 +329,75 @@ class Rule(ABC):
 		return f"{self.__class__.__name__} ({self.pattern.complexity})"
 
 
+class RuleSetAnalyser:
+	_instance = None
+
+	def __new__(cls, rule_set: RuleSet, *args, **kwargs):
+		if cls._instance is None:
+			cls._instance = super().__new__(cls)
+
+		ins = cls._instance
+		ins.find_similar(rule_set)
+		return ins
+
+	def find_similar(self, rule_set: RuleSet):
+		threshold = 0.7
+		comparisons = 0
+		found = 0
+		rules = rule_set._rules
+
+		for i, a in enumerate(rules):
+			for b in rules[i + 1:]:
+				if str(a) == str(b) or a.pattern.complexity != b.pattern.complexity:
+					continue
+
+				comparisons += 1
+				sim = a.pattern.similarity(b.pattern)
+
+				if sim >= threshold:
+					found += 1
+					print(f"Similarity: {sim * 100:.1f}%")
+					print(f"    {a}")
+					print(f"    {b}")
+					diff = self.find_diffs(a.pattern, b.pattern)
+					if diff:
+						print("Differences:")
+						for d in diff:
+							print(f"    {d}")
+					print()
+
+		print(f"\nAnalyzed {len(rules)} rules in {rule_set}, {comparisons} comparisons, {found} mergeable patterns\n")
+
+	def find_diffs(self, a: Slice, b: Slice, path: str = "") -> list[str]:
+		diffs = []
+
+		if a.base != b.base:
+			diffs.append(f"{path}base: {self.format_diff(a.base)} vs {self.format_diff(b.base)}")
+
+		for attr in ['x', 'y', 'z']:
+			a_val, b_val = getattr(a, attr), getattr(b, attr)
+
+			if isinstance(a_val, Slice) and isinstance(b_val, Slice):
+				diffs.extend(self.find_diffs(a_val, b_val, f"{path}{attr}."))
+			elif a_val != b_val and a_val is not None and b_val is not None:
+				diffs.append(f"{path}{attr} -> {self.format_diff(a_val)} vs {self.format_diff(b_val)}")
+
+		if isinstance(a.a, dict) and isinstance(b.a, dict):
+			for k in set(a.a.keys()) & set(b.a.keys()):
+				if a.a[k] != b.a[k]:
+					diffs.append(f"{path}a[{k}]: {self.format_diff(a.a[k])} vs {self.format_diff(b.a[k])}")
+
+		return diffs
+
+	def format_diff(self, val):
+		import ruletools
+		if isinstance(val, int):
+			return ruletools.CotToStr(val)
+		elif isinstance(val, tuple):
+			return f"({', '.join(ruletools.CotToStr(v) if isinstance(v, int) else str(v) for v in val)})"
+		return str(val)
+
+
 class RuleSet(ABC):
 	ArgumentLimit = 8
 
@@ -284,9 +421,11 @@ class RuleSet(ABC):
 			return expanded
 
 		self._rules = expand_rules(rules)
+		if DEBUG:
+			RuleSetAnalyser(self)
 
 	@property
-	def rules(self):
+	def rules(self) -> list[Rule]:
 		return sorted(
 			self._rules,
 			key=lambda r: (r.weight, r.pattern.complexity),
@@ -295,6 +434,9 @@ class RuleSet(ABC):
 
 	def add_rules(self, rules: list[Rule]):
 		self._rules.extend(rules)
+
+	def __str__(self):
+		return str(self.__class__.__name__)
 
 
 class Visitor(ida_hexrays_ctree.ctree_visitor_t):

@@ -30,7 +30,6 @@ ParsePattern("""
     i.x.x.x.op is idaapi.cot_var and
     i.x.x.y.op is idaapi.cot_num
     """)
-
 ```
 
 This declarative style is readable, maintainable, and makes it immediately clear what pattern you're matching. More importantly, extraction logic becomes trivial - once a pattern matches, the data you need is always at predictable positions in the matched items list, eliminating conditional branching and complex state tracking.
@@ -50,7 +49,7 @@ This declarative style is readable, maintainable, and makes it immediately clear
 > [!Note]
 > The predicate is evaluated against the specific node matched by the current **Slice**. While it is not automatically applied to children, the predicate receives the raw `cexpr_t` node, allowing you to manually traverse and inspect the entire subtree (including child nodes) if needed.
 
-## **Rule Prioritization**
+## Rule Prioritization
 
 * Rules execute based on **weight** (higher weight = higher priority).
 * When weights are equal, rules with higher **complexity** run first.
@@ -65,7 +64,7 @@ When a `Rule` matches an AST pattern, the `extract(items)` method receives a lis
 Consider a pattern designed to find a call where the argument is a pointer calculation:
 
 ```python
-return Slice(cot_call,                             # items[0]
+return Slice(cot_call,                              # items[0]
              x=cot_obj,                             # items[1]
              a=Slice(cot_ptr,                       # items[2]
                      x=Slice(cot_cast,              # items[3]
@@ -167,7 +166,7 @@ def resolve_conflict(self,
 * **Pointers**: Prioritizes pointer types over scalar types (e.g., preferring `char *` over `__int64`).
 * **Size Validation**: Protects against potentially incorrect type assignments by rejecting new non-array types that exceed 8 bytes.
 
-## **Custom Conflict Handling**
+## Custom Conflict Handling
 
 Users can override `resolve_conflict` in a subclass to implement their own logic, for example:
 
@@ -306,7 +305,6 @@ def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
 
 ```python
 def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
-    # Offset 0x10 contains pointer to structure with field at offset 0x20
     r1 = AccessInfo(0x10,
                     AccessInfo(0x20, items[0].type))
     return RuleExtractResult(r1, self)
@@ -327,7 +325,8 @@ def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
 
 The `Populator` automatically creates nested structure definitions based on the `AccessInfo` chain depth.
 
-## **Reaching the Same Nested Node Multiple Times**
+
+## Reaching the Same Nested Node Multiple Times
 
 Rules can emit multiple `AccessInfo` instances that target the same nested structure. For example:
 
@@ -339,6 +338,13 @@ def extract(self, items: list[cexpr_t]) -> RuleExtractResult | None:
 ```
 
 Here, both `r1` and `r2` reach into the nested struct at offset `8`. The `Populator` merges them, so members at offsets `0` and `16` are added **consecutively** into the same structure.
+
+
+## RuleSet Similarity Scan
+
+When `DEBUG` is enabled in `common.py`, **Suture** automatically performs a similarity scan across all rules in a `RuleSet`. Patterns of the same length are compared, and differences are printed to the console. This makes it easy to spot rules that could be merged—for instance, if one pattern has `cot_var` and another has `cot_ptr` at the same position, the scan highlights the similarity, allowing them to be combined by passing a tuple to the `Slice` at that position with `(cot_var, cot_ptr)`. This keeps your rule set cleaner and more maintainable.
+
+
 
 
 ## File Structure

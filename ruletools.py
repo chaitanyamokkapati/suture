@@ -5,13 +5,16 @@ from typing import Callable
 from re import search
 
 
-def PrintItem(e: ida_hexrays_ctree.cexpr_t):
-	if not hasattr(PrintItem, '_keys'):
-		PrintItem._keys = {val: name for name, val in ida_hexrays.__dict__.items() if name.startswith("cot_")}
+def CotToStr(cot: int) -> str:
+	if not hasattr(CotToStr, '_keys'):
+		CotToStr._keys = {val: name for name, val in ida_hexrays.__dict__.items() if name.startswith("cot_")}
+	return CotToStr._keys.get(cot, f"unknown_{cot}")
 
+
+def PrintItem(e: ida_hexrays_ctree.cexpr_t):
 	t = e.type
 	op = e.op
-	op_name = PrintItem._keys.get(op, f"unknown_{op}")
+	op_name = CotToStr(op)
 
 	if op == ida_hexrays_ctree.cot_num:
 		val = f" {e.numval()}"
