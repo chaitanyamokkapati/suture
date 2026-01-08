@@ -120,34 +120,3 @@ class TestSliceMatch:
 			assert True
 		else:
 			assert False
-
-	def test_call_args_slice_match_any(self):
-		e_call = ccot(ida_hexrays_ctree.cot_call)
-		e_call.x = ccot(ida_hexrays_ctree.cot_obj)
-		c_var = ccot(ida_hexrays_ctree.cot_var)
-		c_var2 = ccot(ida_hexrays_ctree.cot_var)
-		arg_wrapper = ida_hexrays.carg_t()
-		arg_wrapper.assign(c_var)
-		arg_wrapper2 = ida_hexrays.carg_t()
-		arg_wrapper2.assign(c_var2)
-		e_call.a.push_back(arg_wrapper)
-		e_call.a.push_back(arg_wrapper2)
-		arg_slice = Slice(base=ida_hexrays_ctree.cot_var)
-		s = Slice(base=ida_hexrays_ctree.cot_call, a=arg_slice)
-		collected = []
-		assert s.matches(e_call, collected) is True
-		assert len([i for i in collected if i.op == ida_hexrays_ctree.cot_var]) == 2
-		assert len([i for i in collected if i.op == ida_hexrays_ctree.cot_call]) == 1
-
-	def test_call_args_slice_match_any_fail(self):
-		e_call = ccot(ida_hexrays_ctree.cot_call)
-		e_call.x = ccot(ida_hexrays_ctree.cot_obj)
-		c_var = ccot(ida_hexrays_ctree.cot_var)
-		arg_wrapper = ida_hexrays.carg_t()
-		arg_wrapper.assign(c_var)
-		e_call.a.push_back(arg_wrapper)
-		arg_slice = Slice(base=ida_hexrays_ctree.cot_add)
-		s = Slice(base=ida_hexrays_ctree.cot_call, a=arg_slice)
-		collected = []
-		assert s.matches(e_call, collected) is False
-		assert len(collected) == 0

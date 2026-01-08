@@ -19,5 +19,6 @@ class DefaultRuleSet(RuleSet):
 			FieldAccess2,
 			FunctionArgument3,
 			FunctionArgument4,
+			FunctionArgument5,
 			NestedRootVtableCall
 		])

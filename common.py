@@ -127,33 +127,24 @@ class Slice:
 				collected.append(leaf)
 
 		if self.a and expr.op == ida_hexrays_ctree.cot_call:
-			if isinstance(self.a, dict):
-				for idx, arg in self.a.items():
-					if idx >= len(expr.a):
-						del collected[init_len:]
-						return False
+			if not isinstance(self.a, dict):
+				raise Exception("Failed a= expansion")
 
-					arg_leaf = expr.a[idx]
-					if isinstance(arg, Slice):
-						if not arg.matches(arg_leaf, collected):
-							del collected[init_len:]
-							return False
-					elif arg != cot_any:
-						if arg_leaf.op != arg:
-							del collected[init_len:]
-							return False
-						collected.append(arg_leaf)
-			else:
-				matched = False
-				for arg in expr.a:
-					temp_len = len(collected)
-					if not self.a.matches(arg, collected):
-						del collected[temp_len:]
-					else:
-						matched = True
-				if not matched:
+			for idx, arg in self.a.items():
+				if idx >= len(expr.a):
 					del collected[init_len:]
 					return False
+
+				arg_leaf = expr.a[idx]
+				if isinstance(arg, Slice):
+					if not arg.matches(arg_leaf, collected):
+						del collected[init_len:]
+						return False
+				elif arg != cot_any:
+					if arg_leaf.op != arg:
+						del collected[init_len:]
+						return False
+					collected.append(arg_leaf)
 
 		return True
 
@@ -312,7 +303,8 @@ class Rule(ABC):
 
 	def match(self, start: ida_hexrays_ctree.cexpr_t) -> list[ida_hexrays_ctree.cexpr_t] | None:
 		collected = list()
-		if self.pattern.matches(start, collected):
+		pat = getattr(self, "_expanded_pattern", self.pattern)
+		if pat.matches(start, collected):
 			return collected
 		return None
 
@@ -322,7 +314,7 @@ class Rule(ABC):
 		pass
 
 	@abstractmethod
-	def extract(self) -> RuleExtractResult:
+	def extract(self, items: list[ida_hexrays_ctree.cexpr_t]) -> RuleExtractResult:
 		pass
 
 	def __str__(self):
@@ -402,27 +394,37 @@ class RuleSet(ABC):
 	ArgumentLimit = 8
 
 	def __init__(self, rules: list[Type[Rule]]):
-		def expand_rules(rules_list: list[Type[Rule]]):
-			expanded = []
-			for rule_cls in rules_list:
-				ins = rule_cls()
-				pattern = ins.pattern
-
-				if pattern.base == ida_hexrays_ctree.cot_call:
-					if isinstance(pattern.a, Slice):
-						for i in range(RuleSet.ArgumentLimit):
-							r = rule_cls()
-							r.pattern.a = {i: pattern.a}
-							expanded.append(r)
-					else:
-						expanded.append(ins)
-				else:
-					expanded.append(ins)
-			return expanded
-
-		self._rules = expand_rules(rules)
+		self._rules = self.expand_rules(rules)
 		if DEBUG:
 			RuleSetAnalyser(self)
+
+	@staticmethod
+	def expand_rules(rules: list[type[Rule]]):
+		expanded = []
+		for rule_cls in rules:
+			ins = rule_cls()
+			pattern = ins.pattern
+
+			if pattern.base == ida_hexrays_ctree.cot_call:
+				if isinstance(pattern.a, Slice):
+					for i in range(RuleSet.ArgumentLimit):
+						r = rule_cls()
+						pat = Slice(
+							base=pattern.base,
+							x=pattern.x,
+							y=pattern.y,
+							z=pattern.z,
+							a={i: pattern.a},
+							predicate=pattern.predicate
+						)
+						setattr(r, "_expanded_pattern", pat)
+						expanded.append(r)
+				else:
+					expanded.append(ins)
+			else:
+				expanded.append(ins)
+
+		return expanded
 
 	@property
 	def rules(self) -> list[Rule]:

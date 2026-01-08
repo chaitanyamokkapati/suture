@@ -238,6 +238,24 @@ class FunctionArgument4(Rule):
 		return RuleExtractResult(r1, self)
 
 
+class FunctionArgument5(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_add and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_cast and
+		i.x.x.x.op is idaapi.cot_add and
+		i.x.x.x.x.op is idaapi.cot_var and
+		i.x.x.x.y.op is idaapi.cot_num and
+		i.y.op is idaapi.cot_num""")
+
+	@DebugItems
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[5].numval(), AccessInfo(items[6].numval(), items[1].type))
+		return RuleExtractResult(r1, self)
+
+
 class NestedRootVtableCall(Rule):
 	@property
 	def pattern(self) -> Slice:
