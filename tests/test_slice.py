@@ -14,7 +14,7 @@ def ccot(op):
 	return e
 
 
-class TestSliceMatch:
+class TestSlice:
 	def setup_method(self):
 		self.cot_var = ida_hexrays_ctree.cot_var
 		self.cot_num = ida_hexrays_ctree.cot_num
@@ -112,11 +112,37 @@ class TestSliceMatch:
 		assert len(collected) == 2
 		assert collected[0].op == ida_hexrays_ctree.cot_lnot
 
-	def test_cot_call_assert(self):
+	def test_a_param_without_cot_call(self):
 		try:
-			Slice(base=ida_hexrays_ctree.cot_var, a={0: common.cot_any})
-			Slice(base=Slice(ida_hexrays_ctree.cot_var), a={0: common.cot_any})
+			Slice(base=ida_hexrays_ctree.cot_var, a={0: Slice(common.cot_any)})
 		except AssertionError:
 			assert True
 		else:
 			assert False
+
+	def test_nested_call_with_wildcard(self):
+		try:
+			Slice(base=ida_hexrays_ctree.cot_ptr,
+			      x=Slice(ida_hexrays_ctree.cot_var,
+			              x=Slice(ida_hexrays_ctree.cot_ptr,
+			                      x=Slice(ida_hexrays_ctree.cot_call, a=Slice(ida_hexrays_ctree.cot_add)))))
+		except NotImplementedError:
+			assert True
+		else:
+			assert False
+
+	def test_nested_call_with_dict(self):
+		try:
+			Slice(base=ida_hexrays_ctree.cot_ptr,
+			      x=Slice(ida_hexrays_ctree.cot_var,
+			              x=Slice(ida_hexrays_ctree.cot_ptr,
+			                      x=Slice(ida_hexrays_ctree.cot_call,
+			                              a={0: Slice(ida_hexrays_ctree.cot_add)}
+			                              )
+			                      )
+			              )
+			      )
+		except NotImplementedError:
+			assert False
+		else:
+			assert True

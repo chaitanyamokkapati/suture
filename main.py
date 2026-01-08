@@ -17,20 +17,23 @@ class Suture(ida_kernwin.action_handler_t):
 		self.vdui: ida_hexrays.vdui_t
 		self.cit: ida_hexrays_ctree.citem_t
 		self.lvar: ida_hexrays_micro.lvar_t
-		self.lvar_name = str()
-		self.lvar_type = ida_typeinf.tinfo_t()
-		self.lvar_type_new = ida_typeinf.tinfo_t()
+		self.lvar_name: str
+		self.lvar_type: ida_typeinf.tinfo_t
+		self.lvar_type_new: ida_typeinf.tinfo_t | None
+		self.added: bool
 
 	def activate(self, ctx):
 		self.vdui = utils.get_current_vdui()
 		if not utils.can_process_lvar(self.vdui):
 			return
 
+		self.added = False
+
 		self.init_attrs()
-		utils.assign_lvar_type(self.vdui, self.lvar_name, ida_typeinf.tinfo_t("__int64"))
+		utils.set_lvar_type(self.vdui, self.lvar_name, ida_typeinf.tinfo_t("__int64"))
 		self.process()
-		lvar_type = self.lvar_type_new if len(str(self.lvar_type_new)) else self.lvar_type
-		utils.assign_lvar_type(self.vdui, self.lvar_name, lvar_type)
+		lt = self.lvar_type_new if self.added else self.lvar_type
+		utils.set_lvar_type(self.vdui, self.lvar_name, lt)
 
 	def update(self, ctx):
 		return ida_kernwin.AST_ENABLE_FOR_WIDGET
@@ -40,6 +43,7 @@ class Suture(ida_kernwin.action_handler_t):
 		self.lvar = utils.get_cursor_lvar(self.vdui)
 		self.lvar_name = self.lvar.name
 		self.lvar_type = ida_typeinf.tinfo_t(str(self.lvar.tif))
+		self.lvar_type_new = None
 
 	def process(self):
 		new_struct_name = str()
@@ -68,10 +72,11 @@ class Suture(ida_kernwin.action_handler_t):
 		if new_struct_name:
 			struct_tif = utils.add_struct(new_struct_name)
 		else:
-			struct_tif = ida_typeinf.remove_pointer(self.lvar_type)
+			struct_tif = self.lvar_type
 
 		common.Populator(struct_tif, extracted)
-		self.lvar_type_new = ida_hexrays.make_pointer(struct_tif)
+		self.lvar_type_new = struct_tif if struct_tif.is_ptr() else ida_hexrays.make_pointer(struct_tif)
+		self.added = True
 
 
 class ContextHook(ida_kernwin.UI_Hooks):
@@ -91,7 +96,8 @@ def run_tests():
 
 	targets = [
 		test_dir / "test_parser.py::TestParsePattern",
-		test_dir / "test_slice.py::TestSliceMatch",
+		test_dir / "test_slice.py::TestSlice",
+		test_dir / "test_ruleset.py::TestRuleSet",
 	]
 
 	pytest.main([str(t) for t in targets])

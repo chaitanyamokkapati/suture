@@ -90,7 +90,7 @@ def new_tmpstruct_name() -> str:
 		i += 1
 
 
-def assign_lvar_type(vdui: ida_hexrays_ctree.vdui_t, lvar_name: str, var_tif: ida_typeinf.tinfo_t):
+def set_lvar_type(vdui: ida_hexrays_ctree.vdui_t, lvar_name: str, var_tif: ida_typeinf.tinfo_t):
 	for lvar in vdui.cfunc.get_lvars():
 		if lvar.name == lvar_name:
 			vdui.set_lvar_type(lvar, var_tif)
@@ -141,7 +141,7 @@ def can_process_lvar(vdui: ida_hexrays.vdui_t) -> bool:
 
 def log_struct_action(struct_tif: ida_typeinf.tinfo_t,
                       off: int,
-                      added=False):
+                      added: bool):
 	t = "Added" if added else "Conflict"
 	print("{} {} @ 0x{:X} for {}".format(
 		t,
@@ -149,3 +149,17 @@ def log_struct_action(struct_tif: ida_typeinf.tinfo_t,
 		off,
 		str(struct_tif))
 	)
+
+
+def get_ptr_shift(t: ida_typeinf.tinfo_t) -> int:
+	if not t.is_ptr():
+		return 0
+	info = ida_typeinf.ptr_type_data_t()
+	t.get_ptr_details(info)
+	if info.is_shifted():
+		return info.delta
+	return 0
+
+
+def get_proc_ptr_size() -> int:
+	return 8 if idc.__EA64__ else 4

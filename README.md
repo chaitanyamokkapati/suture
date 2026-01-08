@@ -5,14 +5,10 @@ Declarative AST pattern matching framework for Hex-Rays Decompiler with automate
 
 ## Preview
 ![](img/p1.gif)
-
 > mass member assignment with type inference and safe updates
 
-
 ![](img/p2.gif)
-
 > multi-level structure recovery
-
 
 ## Overview
 
@@ -42,9 +38,12 @@ This declarative style is readable, maintainable, and makes it immediately clear
 * **AST Pattern Matching**: Analyzes the abstract syntax tree of decompiled functions to identify structure access patterns.
 * **Wildcard Support**: Use `cot_any` as a wildcard to match any operation type, allowing for flexible patterns.
 * **Pattern Termination**: Use `cot_none` to explicitly terminate a pattern branch, asserting that no nodes follow.
-* **Function Call Matching**: Match specific arguments in `cot_call` nodes using the `a=` parameter. Passing `Slice()` to `a=` will automatically expand the rule into concrete rules based on `RuleSet.ArgumentLimit`.
+* **Function Call Matching**: Match specific arguments in `cot_call` nodes using the `a=` parameter. Passing `Slice()` to `a=` will automatically expand the rule into concrete rules `a={i: Slice(...)}` based on `RuleSet.ArgumentLimit`.
 * **Target Filtering**: The `Populator` automatically filters the results of a match, ensuring only items that directly reference the targeted variable are passed to the `extract()` method. This guarantees you are only processing and refining the specific variable you are currently targeting.
 * **Predicate Functions**: Attach custom predicates to patterns for additional validation logic (e.g., `predicate=lambda e: ...`).
+
+> [!Note]
+> Wildcard argument expansion via `a=Slice(...)` is supported only when `cot_call` is the root of the pattern. When `cot_call` appears in a nested position, arguments must be matched explicitly using an index map (for example, `a={0: Slice(...)}`).
 
 > [!Note]
 > The predicate is evaluated against the specific node matched by the current **Slice**. While it is not automatically applied to children, the predicate receives the raw `cexpr_t` node, allowing you to manually traverse and inspect the entire subtree (including child nodes) if needed.
@@ -87,8 +86,8 @@ return Slice(cot_call,                              # items[0]
 | `items[2]` | `cot_ptr`     | The argument node (matched via the expanded `a` branch). |
 | `items[3]` | `cot_cast`    | The pointer cast inside the argument.                    |
 | `items[4]` | `cot_add`     | The addition inside the cast.                            |
-| `items[5]` | `cot_var`     | The base variable (e.g. `this` or a vtable pointer).    |
-| `items[6]` | `cot_num`     | The numeric constant (e.g. the vtable offset).          |
+| `items[5]` | `cot_var`     | The base variable (e.g. `this` or a vtable pointer).     |
+| `items[6]` | `cot_num`     | The numeric constant (e.g. the vtable offset).           |
 
 ### Implementation constraints
 

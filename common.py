@@ -6,7 +6,6 @@ import ida_hexrays
 import ida_hexrays_ctree
 import ida_typeinf
 import ida_lines
-import idc
 import utils
 from ida_typeinf import tinfo_t
 
@@ -21,7 +20,7 @@ class Slice:
 	             x: int | Slice | tuple[int | Slice, ...] | None = None,
 	             y: int | Slice | tuple[int | Slice, ...] | None = None,
 	             z: int | Slice | tuple[int | Slice, ...] | None = None,
-	             a: dict[int, Slice | int] | Slice | None = None,
+	             a: dict[int, Slice] | Slice | None = None,
 	             predicate: Callable[[ida_hexrays_ctree.cexpr_t], bool] | None = None
 	             ):
 		self.base = base
@@ -31,24 +30,24 @@ class Slice:
 		self.a = a
 		self.predicate = predicate
 		if a and isinstance(base, int):
-			assert base == ida_hexrays_ctree.cot_call
-		self.validate_no_nested_calls()
+			assert base == ida_hexrays_ctree.cot_call, '"a=" parameter is supported for cot_call only'
+		self.assert_no_nested_cot_call(True)
 
-	def validate_no_nested_calls(self):
+	def assert_no_nested_cot_call(self, is_root=False):
+		if not is_root and self.base == ida_hexrays_ctree.cot_call:
+			if self.a and isinstance(self.a, Slice):
+				raise NotImplementedError("Nested cot_call with wildcard is not supported. Please use a={x:y}")
+
 		for attr in [self.x, self.y, self.z]:
 			if isinstance(attr, Slice):
-				if attr.base == ida_hexrays_ctree.cot_call:
-					raise Exception("Nested cot_call is not supported")
+				attr.assert_no_nested_cot_call()
 
 		if isinstance(self.a, Slice):
-			if self.a.base == ida_hexrays_ctree.cot_call:
-				raise Exception("Nested cot_call is not supported")
-
+			self.a.assert_no_nested_cot_call()
 		elif isinstance(self.a, dict):
 			for val in self.a.values():
 				if isinstance(val, Slice):
-					if val.base == ida_hexrays_ctree.cot_call:
-						raise Exception("Nested cot_call is not supported")
+					val.assert_no_nested_cot_call()
 
 	def matches(self, expr: ida_hexrays_ctree.cexpr_t, collected: list[ida_hexrays_ctree.cexpr_t]) -> bool:
 		init_len = len(collected)
@@ -283,6 +282,10 @@ class RuleExtractResult:
 
 
 class Rule(ABC):
+	def __init__(self):
+		self._expanded_pattern: Slice | None = None
+		"Pattern with expanded cot_call a=wildcard into a={x: y}"
+
 	@property
 	def weight(self):
 		# Rules with higher weight run first
@@ -303,8 +306,8 @@ class Rule(ABC):
 
 	def match(self, start: ida_hexrays_ctree.cexpr_t) -> list[ida_hexrays_ctree.cexpr_t] | None:
 		collected = list()
-		pat = getattr(self, "_expanded_pattern", self.pattern)
-		if pat.matches(start, collected):
+		p = self._expanded_pattern or self.pattern
+		if p.matches(start, collected):
 			return collected
 		return None
 
@@ -409,7 +412,7 @@ class RuleSet(ABC):
 				if isinstance(pattern.a, Slice):
 					for i in range(RuleSet.ArgumentLimit):
 						r = rule_cls()
-						pat = Slice(
+						p = Slice(
 							base=pattern.base,
 							x=pattern.x,
 							y=pattern.y,
@@ -417,7 +420,7 @@ class RuleSet(ABC):
 							a={i: pattern.a},
 							predicate=pattern.predicate
 						)
-						setattr(r, "_expanded_pattern", pat)
+						r._expanded_pattern = p
 						expanded.append(r)
 				else:
 					expanded.append(ins)
@@ -569,53 +572,62 @@ class Extractor:
 class Populator:
 	Struct = dict
 
-	def __init__(self, struct_tif: ida_typeinf.tinfo_t, results: list[RuleExtractResult]):
-		self.struct_tif = struct_tif
+	def __init__(self, struct: ida_typeinf.tinfo_t, results: list[RuleExtractResult]):
+		self.shift = utils.get_ptr_shift(struct)
+		self.struct_tif = struct.get_pointed_object() if struct.is_ptr() else struct
 		self.results = results
 		self.run()
 
 	def run(self):
 		layout = self.create_layout(self.results)
 
-		def populate(stif, lays: dict[int, dict | tinfo_t]):
-			if DEBUG:
-				print(f"\n------ POPULATE ------")
-				print(f"Struct Type: {stif}\n{"\n".join([f"0x{k:02X} -> {v}" for k, v in lays.items()])}")
-				print()
-
-			for off, t in lays.items():
-				added = False
-
-				if isinstance(t, Populator.Struct):
-					psize = 8 if idc.__EA64__ else 4
+		def _print_layout(l: Populator.Struct, lvl=0):
+			for k, v in sorted(l.items()):
+				if isinstance(v, Populator.Struct):
+					print("    " * lvl + f"0x{k:02X} ->")
+					_print_layout(v, lvl + 1)
 				else:
-					psize = t.get_size()
+					print("    " * lvl + f"0x{k:02X}: {v}")
 
-				can_fit, ov_off = utils.can_fit_member(stif, off, psize)
+		if DEBUG:
+			print("\n------ LAYOUT ------")
+			_print_layout(layout)
+			print()
 
-				if can_fit:
-					if isinstance(t, dict):
-						if ntif := utils.get_member_type(stif, off):
-							if utils.is_struct_ptr(ntif):
-								ntif = ntif.get_pointed_object()
+		self.populate(self.struct_tif, layout, self.shift)
 
-						if not ntif:
-							n = utils.new_tmpstruct_name()
-							ntif = utils.add_struct(n)
-							pt = ida_hexrays.make_pointer(ntif)
-							utils.add_member(stif, n, pt, off)
-							added = True
+	def populate(self, s: ida_typeinf.tinfo_t, l: dict[int, dict | tinfo_t], shift=0):
+		for o, t in l.items():
+			o += shift
+			n = f"field_{o:X}"
+			added = False
 
-						populate(ntif, t)
-					else:
-						n = f"field_{off:X}"
-						utils.add_member(stif, n, t, off)
-						added = True
+			if DEBUG:
+				print(f"Populate: {s} @ 0x{o:02X} -> {t}")
 
-				ov = off if added else ov_off
-				utils.log_struct_action(stif, ov, added)
+			ts = t.get_size() if isinstance(t, tinfo_t) else utils.get_proc_ptr_size()
+			fit, ovf = utils.can_fit_member(s, o, ts)
 
-		populate(self.struct_tif, layout)
+			if isinstance(t, Populator.Struct):
+				tm = utils.get_member_type(s, o)
+				if tm and utils.is_struct_ptr(tm):
+					ts = tm.get_pointed_object()
+					shift = utils.get_ptr_shift(tm)
+					self.populate(ts, t, shift)
+					continue
+				elif fit:
+					n = utils.new_tmpstruct_name()
+					ts = utils.add_struct(n)
+					self.populate(ts, t)
+					t = ida_hexrays.make_pointer(ts)
+
+			if fit:
+				added = True
+				utils.add_member(s, n, t, o)
+			else:
+				o = ovf
+
+			utils.log_struct_action(s, o, added)
 
 	def resolve_conflict(self,
 	                     org: Populator.Struct | tinfo_t,
@@ -663,9 +675,9 @@ class Populator:
 				t = t.get_pointed_object()
 			return t
 
-		new_base = strip_ptr(new)
+		bs = strip_ptr(new)
 
-		if new_base.get_size() > 8 and not new_base.is_array():
+		if bs.get_size() > 8 and not bs.is_array() and not bs.is_struct():
 			return org
 
 		return new
@@ -676,10 +688,6 @@ class Populator:
 		def navigate(s, i):
 			o = i.off
 			t = i.tif
-
-			if DEBUG:
-				print("------ NAVIGATE ------")
-				print(f"  0x{o:02X}\n  {t}")
 
 			if isinstance(t, tinfo_t):
 				org = s.get(o, None)
