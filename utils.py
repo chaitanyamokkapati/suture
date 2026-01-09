@@ -90,13 +90,6 @@ def new_tmpstruct_name() -> str:
 		i += 1
 
 
-def set_lvar_type(vdui: ida_hexrays_ctree.vdui_t, lvar_name: str, var_tif: ida_typeinf.tinfo_t):
-	for lvar in vdui.cfunc.get_lvars():
-		if lvar.name == lvar_name:
-			vdui.set_lvar_type(lvar, var_tif)
-			break
-
-
 def ask_struct_name() -> str | None:
 	while True:
 		if not (name := ida_kernwin.ask_str(new_tmpstruct_name(), 0, "New struct name")):
@@ -133,7 +126,7 @@ def can_process_lvar(vdui: ida_hexrays.vdui_t) -> bool:
 
 	if vdui.get_current_item(ida_hexrays_ctree.USE_KEYBOARD):
 		lvar = get_cursor_lvar(vdui)
-		if lvar and not lvar.is_stk_var():
+		if lvar:
 			return True
 
 	return False

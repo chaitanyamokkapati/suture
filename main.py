@@ -1,4 +1,4 @@
-from rulesets import DefaultRuleSet
+from rulesets import ClassRuleSet, StackRuleSet
 import ida_kernwin
 import ida_hexrays
 import ida_hexrays_micro
@@ -15,40 +15,51 @@ class Suture(ida_kernwin.action_handler_t):
 	def __init__(self):
 		super().__init__()
 		self.vdui: ida_hexrays.vdui_t
-		self.cit: ida_hexrays_ctree.citem_t
 		self.lvar: ida_hexrays_micro.lvar_t
 		self.lvar_name: str
 		self.lvar_type: ida_typeinf.tinfo_t
 		self.lvar_type_new: ida_typeinf.tinfo_t | None
+		self.is_stk_lvar: bool
 		self.added: bool
 
 	def activate(self, ctx):
 		self.vdui = utils.get_current_vdui()
 		if not utils.can_process_lvar(self.vdui):
 			return
-
 		self.added = False
-
 		self.init_attrs()
-		utils.set_lvar_type(self.vdui, self.lvar_name, ida_typeinf.tinfo_t("__int64"))
 		self.process()
 		lt = self.lvar_type_new if self.added else self.lvar_type
-		utils.set_lvar_type(self.vdui, self.lvar_name, lt)
+		self.set_lvar_type(lt)
 
 	def update(self, ctx):
 		return ida_kernwin.AST_ENABLE_FOR_WIDGET
 
+	def set_lvar_type(self, t: ida_typeinf.tinfo_t | str):
+		if isinstance(t, str):
+			t = ida_typeinf.tinfo_t(t)
+		for lvar in self.vdui.cfunc.get_lvars():
+			if lvar.name == self.lvar_name:
+				self.vdui.set_lvar_type(lvar, t)
+				break
+
 	def init_attrs(self):
-		self.cit = self.vdui.item.it
-		self.lvar = utils.get_cursor_lvar(self.vdui)
-		self.lvar_name = self.lvar.name
-		self.lvar_type = ida_typeinf.tinfo_t(str(self.lvar.tif))
+		lvar = utils.get_cursor_lvar(self.vdui)
+		self.lvar_name = lvar.name
+		self.lvar_type = ida_typeinf.tinfo_t(str(lvar.tif))
 		self.lvar_type_new = None
+		self.is_stk_lvar = lvar.is_stk_var()
 
 	def process(self):
 		new_struct_name = str()
 
-		matcher = common.Matcher(self.vdui.cfunc, DefaultRuleSet())
+		if self.is_stk_lvar:
+			rs = StackRuleSet()
+		else:
+			rs = ClassRuleSet()
+			self.set_lvar_type("__int64")
+
+		matcher = common.Matcher(self.vdui.cfunc, rs)
 		matches = matcher.match()
 
 		filtered, extracted = common.Extractor(self.lvar_name, self.vdui.cfunc, matches).data
@@ -63,10 +74,15 @@ class Suture(ida_kernwin.action_handler_t):
 			print("No struct access found")
 			return
 
-		if not self.lvar_type.is_ptr() or not utils.is_struct_ptr(self.lvar_type):
-			new_struct_name = utils.ask_struct_name()
+		ask = False
 
-			if not new_struct_name:
+		if self.is_stk_lvar and not self.lvar_type.is_struct():
+			ask = True
+		elif not self.lvar_type.is_ptr() or not utils.is_struct_ptr(self.lvar_type):
+			ask = True
+
+		if ask:
+			if not (new_struct_name := utils.ask_struct_name()):
 				return
 
 		if new_struct_name:
@@ -75,7 +91,12 @@ class Suture(ida_kernwin.action_handler_t):
 			struct_tif = self.lvar_type
 
 		common.Populator(struct_tif, extracted)
-		self.lvar_type_new = struct_tif if struct_tif.is_ptr() else ida_hexrays.make_pointer(struct_tif)
+
+		if self.is_stk_lvar:
+			self.lvar_type_new = struct_tif
+		else:
+			self.lvar_type_new = struct_tif if struct_tif.is_ptr() else ida_hexrays.make_pointer(struct_tif)
+
 		self.added = True
 
 
@@ -95,9 +116,10 @@ def run_tests():
 	test_dir = Path(__file__).parent / "tests"
 
 	targets = [
-		test_dir / "test_parser.py::TestParsePattern",
-		test_dir / "test_slice.py::TestSlice",
-		test_dir / "test_ruleset.py::TestRuleSet",
+		test_dir / "test_parser.py",
+		test_dir / "test_slice.py",
+		test_dir / "test_ruleset.py",
+		test_dir / "test_populator.py",
 	]
 
 	pytest.main([str(t) for t in targets])

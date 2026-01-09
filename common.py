@@ -642,6 +642,9 @@ class Populator:
 		if isinstance(org, Populator.Struct):
 			return org
 
+		if isinstance(new, Populator.Struct):
+			return new
+
 		org_str = str(org)
 		new_str = str(new)
 

@@ -1,19 +1,10 @@
 import ida_typeinf
-from ida_hexrays_ctree import cexpr_t, cot_call, cot_add, cot_var, cot_num, cot_ptr, cot_cast, cot_obj
+from ida_hexrays_ctree import cexpr_t, cot_call, cot_add, cot_var, cot_num, cot_ptr, cot_cast
 from common import RuleExtractResult, AccessInfo, Slice, Rule
 from ruletools import ParsePattern, DebugItems, PrintItem
 
 
-class XYZ_DebugRule_XYZ(Rule):
-	@property
-	def pattern(self) -> Slice:
-		return Slice(cot_call, a=Slice(cot_add, x=Slice(cot_call, a=Slice(cot_add))))
-
-	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
-		r1 = AccessInfo(8, items[0].type)
-		return RuleExtractResult(r1, self)
-
-
+# -------------------------------------- HEAP RULESET --------------------------------------
 class InterfaceDispatch(Rule):
 	@property
 	def pattern(self) -> Slice:
@@ -269,6 +260,189 @@ class NestedRootVtableCall(Rule):
 		r1 = AccessInfo(0, AccessInfo(0, items[0].type))
 		return RuleExtractResult(r1, self)
 
+
+class DoubleNestedRootVtableCall1(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_call and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.x.op is idaapi.cot_var""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(0, AccessInfo(0, AccessInfo(0, items[1].type)))
+		return RuleExtractResult(r1, self)
+
+
+class DoubleNestedRootVtableCall2(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_call and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.op is idaapi.cot_var""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(0, AccessInfo(0, items[1].type))
+		return RuleExtractResult(r1, self)
+
+
+class TripleNestedVtableCall(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_ptr and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.op is idaapi.cot_add and
+		i.x.x.x.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.x.x.x.op is idaapi.cot_add and
+		i.x.x.x.x.x.x.x.x.op is idaapi.cot_var and
+		i.x.x.x.x.x.x.x.y.op is idaapi.cot_num and
+		i.x.x.x.x.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[9].numval(), AccessInfo(items[10].numval(), AccessInfo(0, AccessInfo(0, items[0].type))))
+		return RuleExtractResult(r1, self)
+
+
+class DoubleNestedRootVtableCallWithOffset1(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_call and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.x.op is idaapi.cot_add and
+		i.x.x.x.x.x.x.op is idaapi.cot_var and
+		i.x.x.x.x.x.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[7].numval(), AccessInfo(0, AccessInfo(0, items[1].type)))
+		return RuleExtractResult(r1, self)
+
+
+class DoubleNestedRootVtableCallWithOffset2(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_ptr and
+		i.x.op is idaapi.cot_cast and
+		i.x.x.op is idaapi.cot_add and
+		i.x.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.x.op is idaapi.cot_add and
+		i.x.x.x.x.x.x.op is idaapi.cot_ptr and
+		i.x.x.x.x.x.x.x.op is idaapi.cot_cast and
+		i.x.x.x.x.x.x.x.x.op is idaapi.cot_var and
+		i.x.x.x.x.x.y.op is idaapi.cot_num and
+		i.x.x.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(0, AccessInfo(items[9].numval(), AccessInfo(items[10].numval(), items[0].type)))
+		return RuleExtractResult(r1, self)
+
 	@property
 	def elevated(self):
 		return True
+
+
+# -------------------------------------- STACK RULESET --------------------------------------
+
+class IdxAssignment1(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_asg and
+		i.x.op is idaapi.cot_idx and
+		i.x.x.op is idaapi.cot_var and
+		i.x.y.op is idaapi.cot_num and
+		i.y.op is idaapi.cot_var or idaapi.cot_num or idaapi.cot_ptr""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[1].type.get_size() * items[3].numval(), items[0].type)
+		return RuleExtractResult(r1, self)
+
+
+class DirectAssignmentFromFunction(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_asg and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_var and
+		i.y.op is idaapi.cot_call""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(0, items[2].type)
+		return RuleExtractResult(r1, self)
+
+
+class IdxAssignment2(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_ptr and
+		i.x.op is idaapi.cot_cast and
+		i.x.x.op is idaapi.cot_ref and
+		i.x.x.x.op is idaapi.cot_idx and
+		i.x.x.x.x.op is idaapi.cot_var and
+		i.x.x.x.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[5].numval() * items[3].type.get_size(), items[0].type)
+		return RuleExtractResult(r1, self)
+
+
+class IdxAssignment3(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+			i.op is idaapi.cot_asg and
+			i.x.op is idaapi.cot_ptr and
+			i.y.op is idaapi.cot_idx and
+			i.y.x.op is idaapi.cot_var and
+			i.y.y.op is idaapi.cot_num
+		""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[4].numval() * items[2].type.get_size(), items[0].type)
+		return RuleExtractResult(r1, self)
+
+
+class IdxAssignment4(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_asg and
+		i.x.op is idaapi.cot_idx and
+		i.x.x.op is idaapi.cot_var and
+		i.x.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(items[1].type.get_size() * items[3].numval(), items[0].type)
+		return RuleExtractResult(r1, self)
+
+
+class DirectAssignment(Rule):
+	@property
+	def pattern(self) -> Slice:
+		return ParsePattern("""
+		i.op is idaapi.cot_asg and
+		i.x.op is idaapi.cot_ptr and
+		i.x.x.op is idaapi.cot_cast and
+		i.x.x.x.op is idaapi.cot_var and
+		i.y.op is idaapi.cot_num""")
+
+	def extract(self, items: list[cexpr_t]) -> RuleExtractResult:
+		r1 = AccessInfo(0, items[0].type)
+		return RuleExtractResult(r1, self)

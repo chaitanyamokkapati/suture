@@ -331,9 +331,9 @@ Rules can emit multiple `AccessInfo` instances that target the same nested struc
 
 ```python
 def extract(self, items: list[cexpr_t]) -> RuleExtractResult | None:
-    r1 = AccessInfo(8, AccessInfo(0, items[0].type))
-    r2 = AccessInfo(8, AccessInfo(16, items[3].type))
-    return RuleExtractResult([r1, r2], self)
+	r1 = AccessInfo(8, AccessInfo(0, items[0].type))
+	r2 = AccessInfo(8, AccessInfo(16, items[3].type))
+	return RuleExtractResult([r1, r2], self)
 ```
 
 Here, both `r1` and `r2` reach into the nested struct at offset `8`. The `Populator` merges them, so members at offsets `0` and `16` are added **consecutively** into the same structure.
