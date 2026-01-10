@@ -93,7 +93,6 @@ return Slice(cot_call,                              # items[0]
 
 * **Concrete expansion**: Suture automatically expands `a=Slice()` into 8 (default) unique rule instances. This ensures `items[2]` is always **exactly one** specific argument of the call, never a list of arguments.
 * **Predictable shifts**: If you omit a branch (e.g., you do not define `x=...`), the subsequent items shift up in the index list.
-* **No nested calls**: Only one `cot_call` is allowed per `Slice` tree.
 
 ### AST Head Control
 
